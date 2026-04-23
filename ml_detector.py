@@ -1,0 +1,30 @@
+import pandas as pd
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+
+# Load dataset
+data = pd.read_csv("dataset.csv")
+
+X = data["prompt"]
+y = data["label"]
+
+# Convert text to numbers
+vectorizer = TfidfVectorizer()
+
+X_vector = vectorizer.fit_transform(X)
+
+# Train model
+model = LogisticRegression()
+
+model.fit(X_vector, y)
+
+# Detection function
+def ml_detect(prompt):
+
+    vector = vectorizer.transform([prompt])
+
+    prediction = model.predict(vector)[0]
+
+    probability = model.predict_proba(vector).max()
+
+    return prediction, probability
