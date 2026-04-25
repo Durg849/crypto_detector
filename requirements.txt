@@ -1,1 +1,283 @@
+mport streamlit as st
+import pandas as pd
+import datetime
+import matplotlib.pyplot as plt
+import os
 
+from ml_detector import ml_detect
+
+# -----------------------------
+# Page Config
+# -----------------------------
+st.set_page_config(
+    page_title="Prompt Injection Detector",
+    page_icon="🛡️",
+    layout="wide"
+)
+
+# -----------------------------
+# Prompt Firewall
+# -----------------------------
+def prompt_firewall(prompt):
+
+    blocked_words = [
+        "reveal password",
+        "show api key",
+        "system secret",
+        "database password"
+    ]
+
+    for word in blocked_words:
+        if word in prompt.lower():
+            return True
+
+    return False
+
+
+# -----------------------------
+# Rule-Based Detection
+# -----------------------------
+def detect_prompt_injection(prompt):
+
+    suspicious_patterns = [
+        "ignore previous instructions",
+        "reveal system prompt",
+        "bypass safety",
+        "developer mode",
+        "act as system",
+        "pretend you are",
+        "disable restrictions",
+        "jailbreak",
+        "override rules"
+    ]
+
+    found_patterns = []
+
+    for pattern in suspicious_patterns:
+        if pattern in prompt.lower():
+            found_patterns.append(pattern)
+
+    if found_patterns:
+        return True, found_patterns
+    else:
+        return False, []
+
+
+# -----------------------------
+# Risk Score
+# -----------------------------
+def calculate_risk(patterns):
+
+    if len(patterns) == 0:
+        return 10
+    elif len(patterns) == 1:
+        return 40
+    elif len(patterns) == 2:
+        return 70
+    else:
+        return 90
+
+
+# -----------------------------
+# Severity Level
+# -----------------------------
+def severity_level(risk):
+
+    if risk < 30:
+        return "LOW"
+    elif risk < 70:
+        return "MEDIUM"
+    else:
+        return "HIGH"
+
+
+# -----------------------------
+# Attack Type Detection
+# -----------------------------
+def detect_attack_type(patterns):
+
+    attack_types = []
+
+    if "ignore previous instructions" in patterns:
+        attack_types.append("Instruction Override")
+
+    if "reveal system prompt" in patterns:
+        attack_types.append("Data Exfiltration")
+
+    if "pretend you are" in patterns:
+        attack_types.append("Role Manipulation")
+
+    if "bypass safety" in patterns:
+        attack_types.append("Safety Bypass")
+
+    if "jailbreak" in patterns:
+        attack_types.append("Jailbreak Attack")
+
+    if len(attack_types) == 0:
+        attack_types.append("Unknown Attack")
+
+    return attack_types
+
+
+# -----------------------------
+# TITLE
+# -----------------------------
+st.title("🛡️ AI Prompt Injection Attack Detector")
+
+st.write("This system detects malicious prompts that attempt to manipulate AI models.")
+
+# -----------------------------
+# USER INPUT
+# -----------------------------
+user_prompt = st.text_area("Enter Prompt", height=150)
+
+
+# -----------------------------
+# ANALYZE BUTTON
+# -----------------------------
+if st.button("Analyze Prompt"):
+
+    timestamp = datetime.datetime.now()
+
+    # Firewall
+    if prompt_firewall(user_prompt):
+        st.error("🚫 Prompt Blocked by AI Firewall")
+        st.stop()
+
+    # Rule detection
+    detected, patterns = detect_prompt_injection(user_prompt)
+
+    # ML detection
+    ml_label, ml_prob = ml_detect(user_prompt)
+
+    # Risk + severity
+    risk = calculate_risk(patterns)
+
+    severity = severity_level(risk)
+
+    attack_type = detect_attack_type(patterns)
+
+    prompt_length = len(user_prompt.split())
+
+    # -----------------------------
+    # RESULTS
+    # -----------------------------
+    st.subheader("Analysis Result")
+
+    st.write("AI Detection:", ml_label)
+
+    st.write("AI Confidence:", round(ml_prob,2))
+
+    if detected or ml_label == "injection":
+
+        st.error("⚠ Prompt Injection Attack Detected")
+
+        st.write("Attack Type:", attack_type)
+
+        st.write("Risk Score:", risk)
+
+        st.write("Severity:", severity)
+
+        st.write("Detected Patterns:", patterns)
+
+    else:
+
+        st.success("✅ Prompt is Safe")
+
+        st.write("Risk Score:", risk)
+
+        st.write("Severity:", severity)
+
+    st.write("Prompt Length:", prompt_length)
+
+    # -----------------------------
+    # LOGGING
+    # -----------------------------
+    log_data = {
+        "Time": timestamp,
+        "Prompt": user_prompt,
+        "Attack Type": ", ".join(attack_type),
+        "Risk Score": risk,
+        "Severity": severity
+    }
+
+    df = pd.DataFrame([log_data])
+
+    if os.path.exists("attack_logs.csv"):
+        df.to_csv("attack_logs.csv", mode="a", header=False, index=False)
+    else:
+        df.to_csv("attack_logs.csv", index=False)
+
+    st.subheader("Attack Log")
+
+    st.dataframe(df)
+
+    # -----------------------------
+    # VISUALIZATION
+    # -----------------------------
+    st.subheader("Attack Visualization")
+
+    safe = 0
+    attack = 0
+
+    if detected:
+        attack = 1
+    else:
+        safe = 1
+
+    fig, ax = plt.subplots()
+
+    ax.bar(["Safe", "Injection"], [safe, attack])
+
+    st.pyplot(fig)
+
+
+# -----------------------------
+# DASHBOARD
+# -----------------------------
+if os.path.exists("attack_logs.csv"):
+
+    logs = pd.read_csv("attack_logs.csv")
+
+    st.sidebar.subheader("Attack Dashboard")
+
+    st.sidebar.write("Total Prompts:", len(logs))
+
+    st.sidebar.write("High Risk:", len(logs[logs["Severity"]=="HIGH"]))
+
+    st.sidebar.write("Medium Risk:", len(logs[logs["Severity"]=="MEDIUM"]))
+
+    st.sidebar.write("Low Risk:", len(logs[logs["Severity"]=="LOW"]))
+
+    st.subheader("Attack Type Distribution")
+
+    attack_counts = logs["Attack Type"].value_counts()
+
+    fig2, ax2 = plt.subplots()
+
+    ax2.bar(attack_counts.index, attack_counts.values)
+
+    plt.xticks(rotation=30)
+
+    st.pyplot(fig2)
+
+
+# -----------------------------
+# SIDEBAR INFO
+# -----------------------------
+st.sidebar.title("About")
+
+st.sidebar.write("""
+AI Prompt Injection Detection System.
+
+Features:
+- Prompt Firewall
+- Rule Detection
+- Machine Learning Detection
+- Risk Scoring
+- Attack Classification
+- Logging System
+- Security Dashboard
+""")
+
+st.sidebar.write("Developed for AI Security Research.")
