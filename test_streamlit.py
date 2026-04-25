@@ -57,10 +57,7 @@ def detect_prompt_injection(prompt):
         if pattern in prompt.lower():
             found_patterns.append(pattern)
 
-    if found_patterns:
-        return True, found_patterns
-    else:
-        return False, []
+    return (len(found_patterns) > 0), found_patterns
 
 
 # -----------------------------
@@ -123,7 +120,6 @@ def detect_attack_type(patterns):
 # TITLE
 # -----------------------------
 st.title("🛡️ AI Prompt Injection Attack Detector")
-
 st.write("This system detects malicious prompts that attempt to manipulate AI models.")
 
 # -----------------------------
@@ -131,11 +127,14 @@ st.write("This system detects malicious prompts that attempt to manipulate AI mo
 # -----------------------------
 user_prompt = st.text_area("Enter Prompt", height=150)
 
-
 # -----------------------------
 # ANALYZE BUTTON
 # -----------------------------
 if st.button("Analyze Prompt"):
+
+    if not user_prompt.strip():
+        st.warning("Please enter a prompt.")
+        st.stop()
 
     timestamp = datetime.datetime.now()
 
@@ -147,16 +146,29 @@ if st.button("Analyze Prompt"):
     # Rule detection
     detected, patterns = detect_prompt_injection(user_prompt)
 
-    # ML detection
-    ml_label, ml_prob = ml_detect(user_prompt)
+    # -----------------------------
+    # ML Detection (FIXED HERE)
+    # -----------------------------
+    try:
+        result = ml_detect(user_prompt)
+
+        # Handle dynamic returns safely
+        if isinstance(result, tuple):
+            ml_label = result[0]
+            ml_prob = result[1] if len(result) > 1 else 0.5
+        else:
+            ml_label = result
+            ml_prob = 0.5
+
+    except Exception as e:
+        st.error(f"ML Detection Error: {e}")
+        ml_label = "unknown"
+        ml_prob = 0.5
 
     # Risk + severity
     risk = calculate_risk(patterns)
-
     severity = severity_level(risk)
-
     attack_type = detect_attack_type(patterns)
-
     prompt_length = len(user_prompt.split())
 
     # -----------------------------
@@ -165,27 +177,21 @@ if st.button("Analyze Prompt"):
     st.subheader("Analysis Result")
 
     st.write("AI Detection:", ml_label)
-
-    st.write("AI Confidence:", round(ml_prob,2))
+    st.write("AI Confidence:", round(float(ml_prob), 2))
 
     if detected or ml_label == "injection":
 
         st.error("⚠ Prompt Injection Attack Detected")
 
         st.write("Attack Type:", attack_type)
-
         st.write("Risk Score:", risk)
-
         st.write("Severity:", severity)
-
         st.write("Detected Patterns:", patterns)
 
     else:
 
         st.success("✅ Prompt is Safe")
-
         st.write("Risk Score:", risk)
-
         st.write("Severity:", severity)
 
     st.write("Prompt Length:", prompt_length)
@@ -203,13 +209,15 @@ if st.button("Analyze Prompt"):
 
     df = pd.DataFrame([log_data])
 
-    if os.path.exists("attack_logs.csv"):
-        df.to_csv("attack_logs.csv", mode="a", header=False, index=False)
-    else:
-        df.to_csv("attack_logs.csv", index=False)
+    try:
+        if os.path.exists("attack_logs.csv"):
+            df.to_csv("attack_logs.csv", mode="a", header=False, index=False)
+        else:
+            df.to_csv("attack_logs.csv", index=False)
+    except:
+        st.warning("Logging failed (Render may restrict file writing).")
 
     st.subheader("Attack Log")
-
     st.dataframe(df)
 
     # -----------------------------
@@ -226,9 +234,7 @@ if st.button("Analyze Prompt"):
         safe = 1
 
     fig, ax = plt.subplots()
-
     ax.bar(["Safe", "Injection"], [safe, attack])
-
     st.pyplot(fig)
 
 
@@ -242,21 +248,16 @@ if os.path.exists("attack_logs.csv"):
     st.sidebar.subheader("Attack Dashboard")
 
     st.sidebar.write("Total Prompts:", len(logs))
-
-    st.sidebar.write("High Risk:", len(logs[logs["Severity"]=="HIGH"]))
-
-    st.sidebar.write("Medium Risk:", len(logs[logs["Severity"]=="MEDIUM"]))
-
-    st.sidebar.write("Low Risk:", len(logs[logs["Severity"]=="LOW"]))
+    st.sidebar.write("High Risk:", len(logs[logs["Severity"] == "HIGH"]))
+    st.sidebar.write("Medium Risk:", len(logs[logs["Severity"] == "MEDIUM"]))
+    st.sidebar.write("Low Risk:", len(logs[logs["Severity"] == "LOW"]))
 
     st.subheader("Attack Type Distribution")
 
     attack_counts = logs["Attack Type"].value_counts()
 
     fig2, ax2 = plt.subplots()
-
     ax2.bar(attack_counts.index, attack_counts.values)
-
     plt.xticks(rotation=30)
 
     st.pyplot(fig2)
