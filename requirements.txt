@@ -1,4 +1,4 @@
-streamlit
-pandas
-scikit-learn
-matplotlib
+fastapi
+uvicorn
+jinja2
+python-multipart
