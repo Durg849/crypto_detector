@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Docs — Injecto</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0a0e1a;--surface:#111827;--border:#1f2937;--accent:#00d4aa;--text:#f9fafb;--muted:#6b7280;--card:#161d2e}
+  body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif}
+  nav{display:flex;justify-content:space-between;align-items:center;padding:1.2rem 2rem;border-bottom:1px solid var(--border)}
+  .logo{font-family:'JetBrains Mono',monospace;font-size:1.3rem;font-weight:600;color:var(--accent);text-decoration:none}
+  .nav-links a{color:var(--muted);text-decoration:none;margin-left:2rem;font-size:.9rem}
+  .content{max-width:800px;margin:0 auto;padding:3rem 2rem}
+  h1{font-size:2rem;font-weight:800;margin-bottom:.5rem}
+  h2{font-size:1.3rem;font-weight:700;margin:2.5rem 0 .8rem;color:var(--accent)}
+  p{color:var(--muted);line-height:1.7;margin-bottom:1rem}
+  .code{background:#0d1117;border:1px solid var(--border);border-radius:10px;padding:1.2rem;font-family:'JetBrains Mono',monospace;font-size:.85rem;overflow-x:auto;margin:1rem 0;white-space:pre}
+  .tag{display:inline-block;padding:.2rem .6rem;border-radius:6px;font-size:.78rem;font-family:'JetBrains Mono',monospace;background:rgba(0,212,170,.15);color:var(--accent);margin:.2rem}
+  table{width:100%;border-collapse:collapse;margin:1rem 0}
+  th,td{padding:.7rem 1rem;text-align:left;border-bottom:1px solid var(--border);font-size:.9rem}
+  th{color:var(--muted);font-weight:600}
+  td{color:var(--text)}
+  footer{text-align:center;padding:2rem;border-top:1px solid var(--border);color:var(--muted);font-size:.85rem;margin-top:3rem}
+</style>
+</head>
+<body>
+<nav>
+  <a href="/" class="logo">injecto.xyz</a>
+  <div class="nav-links">
+    <a href="/">Home</a>
+    <a href="/pricing">Pricing</a>
+  </div>
+</nav>
+
+<div class="content">
+  <h1>API Documentation</h1>
+  <p>Integrate Injecto into your AI app in under 5 minutes.</p>
+
+  <h2>Base URL</h2>
+  <div class="code">https://injecto.xyz</div>
+
+  <h2>Authentication</h2>
+  <p>Pass your API key in the request header:</p>
+  <div class="code">x-api-key: inj_your_key_here</div>
+
+  <h2>Detect Endpoint</h2>
+  <p><span class="tag">POST</span> /api/detect</p>
+  <div class="code">import requests
+
+response = requests.post(
+    "https://injecto.xyz/api/detect",
+    headers={"x-api-key": "inj_your_key_here"},
+    json={"prompt": "user message here"}
+)
+
+result = response.json()
+print(result)</div>
+
+  <h2>Response Format</h2>
+  <div class="code">{
+  "safe": true,
+  "risk_score": 10,
+  "severity": "LOW",
+  "attack_types": [],
+  "patterns": [],
+  "prompt_length": 5,
+  "timestamp": "2025-06-20T10:30:00"
+}</div>
+
+  <h2>Response Fields</h2>
+  <table>
+    <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+    <tr><td>safe</td><td>boolean</td><td>True = safe, False = injection detected</td></tr>
+    <tr><td>risk_score</td><td>integer</td><td>0–100 risk score</td></tr>
+    <tr><td>severity</td><td>string</td><td>LOW / MEDIUM / HIGH</td></tr>
+    <tr><td>attack_types</td><td>array</td><td>Types of attacks detected</td></tr>
+    <tr><td>patterns</td><td>array</td><td>Exact patterns that matched</td></tr>
+  </table>
+
+  <h2>Python Example (Full Integration)</h2>
+  <div class="code">import requests
+
+def is_safe(user_message):
+    res = requests.post(
+        "https://injecto.xyz/api/detect",
+        headers={"x-api-key": "inj_your_key"},
+        json={"prompt": user_message}
+    )
+    return res.json().get("safe", False)
+
+# In your app:
+user_input = "Hello, how are you?"
+
+if is_safe(user_input):
+    # Send to your AI (Claude, GPT, etc.)
+    pass
+else:
+    print("Blocked: Injection attempt detected")</div>
+
+  <h2>Free Demo (No Key Needed)</h2>
+  <p>For testing, use the public demo endpoint:</p>
+  <div class="code">POST https://injecto.xyz/demo/detect
+Content-Type: application/json
+
+{"prompt": "your test prompt here"}</div>
+
+</div>
+<footer>© 2025 injecto.xyz — Built for AI Security Research</footer>
+</body>
+</html>
