@@ -4,3 +4,6 @@ jinja2
 python-multipart
 streamlit
 matplotlib
+fastapi
+uvicorn
+stripe
