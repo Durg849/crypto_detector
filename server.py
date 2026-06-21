@@ -5,6 +5,19 @@ import uuid
 import datetime
 import json
 import os
+import stripe
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+# ─── Stripe + Email Config (set these in Render environment variables) ─────────
+stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_USER = os.environ.get("SMTP_USER", "")        # your Gmail address
+SMTP_PASS = os.environ.get("SMTP_PASS", "")        # Gmail app password
+FROM_EMAIL = os.environ.get("SMTP_USER", "hello@injecto.xyz")
 
 app = FastAPI(title="Injecto API")
 
@@ -609,6 +622,47 @@ print(response.json())</div>
 </html>"""
 
 
+# ─── Email Helper ─────────────────────────────────────────────────────────────
+
+def send_api_key_email(to_email: str, api_key: str, plan: str):
+    if not SMTP_USER or not SMTP_PASS:
+        print(f"[EMAIL SKIPPED] No SMTP config. Key for {to_email}: {api_key}")
+        return
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "Your Injecto API Key"
+        msg["From"] = FROM_EMAIL
+        msg["To"] = to_email
+
+        plan_limits = {"starter": "1,000", "pro": "50,000", "enterprise": "Unlimited"}
+        limit = plan_limits.get(plan, "1,000")
+
+        html_body = f"""
+        <div style="background:#080c12;color:#e8edf5;font-family:sans-serif;padding:40px;max-width:560px;margin:0 auto;border-radius:12px">
+          <div style="font-size:1.3rem;font-weight:700;color:#00c878;margin-bottom:8px">🛡️ injecto.xyz</div>
+          <h1 style="font-size:1.4rem;color:#fff;margin:24px 0 8px">Your API Key is ready</h1>
+          <p style="color:#7a8499;margin-bottom:24px">Thanks for subscribing to the <strong style="color:#fff">{plan.title()}</strong> plan ({limit} analyses/month).</p>
+          <div style="background:#0e1420;border:1px solid rgba(0,200,120,0.3);border-radius:8px;padding:16px;font-family:monospace;font-size:.9rem;color:#00c878;word-break:break-all;margin-bottom:24px">
+            {api_key}
+          </div>
+          <p style="color:#7a8499;font-size:.875rem;margin-bottom:8px">Use this key in every API request:</p>
+          <div style="background:#0e1420;border:1px solid rgba(255,255,255,0.07);border-radius:8px;padding:14px;font-family:monospace;font-size:.8rem;color:#c9d1e0;margin-bottom:24px">
+            x-api-key: {api_key}
+          </div>
+          <a href="https://injecto.xyz/docs-page" style="display:inline-block;background:#00c878;color:#050a06;font-weight:700;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:.9rem">Read the Docs</a>
+          <p style="color:#4a5468;font-size:.78rem;margin-top:32px">Questions? Reply to this email or contact hello@injecto.xyz</p>
+        </div>"""
+
+        msg.attach(MIMEText(html_body, "html"))
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(FROM_EMAIL, to_email, msg.as_string())
+        print(f"[EMAIL SENT] {to_email} | plan={plan} | key={api_key}")
+    except Exception as e:
+        print(f"[EMAIL ERROR] {e} — key for {to_email}: {api_key}")
+
+
 # ─── ROUTES ───────────────────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
@@ -650,7 +704,56 @@ async def create_key(request: Request):
                      "created": datetime.datetime.now().isoformat(),
                      "requests": 0, "active": True}
     save_keys(keys)
+    send_api_key_email(email, new_key, plan)
     return {"api_key": new_key, "email": email, "plan": plan}
+
+
+@app.post("/stripe/webhook")
+async def stripe_webhook(request: Request):
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature", "")
+
+    # Verify the webhook came from Stripe (not a fake request)
+    try:
+        event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
+    except stripe.error.SignatureVerificationError:
+        raise HTTPException(status_code=400, detail="Invalid Stripe signature")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Someone just paid — generate and email their API key
+    if event["type"] == "checkout.session.completed":
+        session = event["data"]["object"]
+        email = session.get("customer_details", {}).get("email", "")
+        # Map Stripe price IDs to plan names
+        # Replace these with your actual Stripe Price IDs from the dashboard
+        price_id = ""
+        line_items = session.get("line_items", {})
+        # Get plan from metadata if you set it, otherwise detect by amount
+        amount = session.get("amount_total", 0)
+        if amount >= 9900:
+            plan = "enterprise"
+        elif amount >= 2900:
+            plan = "pro"
+        else:
+            plan = "starter"
+
+        if email:
+            new_key = "inj_" + uuid.uuid4().hex[:24]
+            keys = load_keys()
+            keys[new_key] = {
+                "email": email,
+                "plan": plan,
+                "created": datetime.datetime.now().isoformat(),
+                "stripe_session": session.get("id", ""),
+                "requests": 0,
+                "active": True
+            }
+            save_keys(keys)
+            send_api_key_email(email, new_key, plan)
+            print(f"[STRIPE] New {plan} customer: {email} -> {new_key}")
+
+    return {"status": "ok"}
 
 @app.get("/api/stats")
 async def stats(account=Depends(verify_api_key)):
