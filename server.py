@@ -12,7 +12,7 @@ app = FastAPI(title="Injecto API")
 
 # FIX: Use absolute path for templates
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
+templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates."))
 
 # ─── Simple file-based DB for API keys ───────────────────────────────────────
 KEYS_FILE = "api_keys.json"
