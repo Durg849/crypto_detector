@@ -1,6 +1,5 @@
 from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import uvicorn
 import uuid
@@ -10,7 +9,10 @@ import os
 import re
 
 app = FastAPI(title="Injecto API")
-templates = Jinja2Templates(directory="templates")
+
+# FIX: Use absolute path for templates
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
 # ─── Simple file-based DB for API keys ───────────────────────────────────────
 KEYS_FILE = "api_keys.json"
@@ -25,7 +27,7 @@ def save_keys(keys):
     with open(KEYS_FILE, "w") as f:
         json.dump(keys, f, indent=2)
 
-# ─── Injection Detection (your existing logic) ────────────────────────────────
+# ─── Injection Detection ────────────────────────────────────────────────────
 FIREWALL_WORDS = [
     "reveal password", "show api key", "system secret", "database password"
 ]
@@ -73,9 +75,7 @@ def get_attack_types(patterns):
     return types if types else ["Unknown Attack"]
 
 def analyze_prompt(prompt: str) -> dict:
-    """Core detection — runs server-side, your cost, never user's."""
     timestamp = datetime.datetime.now().isoformat()
-
     if firewall_check(prompt):
         return {
             "timestamp": timestamp,
@@ -87,12 +87,10 @@ def analyze_prompt(prompt: str) -> dict:
             "attack_types": ["Firewall Block"],
             "patterns": [],
         }
-
     detected, patterns = detect_injection(prompt)
     risk = calculate_risk(patterns)
     severity = severity_level(risk)
     attack_types = get_attack_types(patterns)
-
     return {
         "timestamp": timestamp,
         "safe": not detected,
@@ -105,7 +103,7 @@ def analyze_prompt(prompt: str) -> dict:
         "prompt_length": len(prompt.split()),
     }
 
-# ─── Middleware: AUTO detect every request ────────────────────────────────────
+# ─── Logging ─────────────────────────────────────────────────────────────────
 LOG_FILE = "server_logs.json"
 
 def log_event(data: dict):
@@ -116,7 +114,7 @@ def log_event(data: dict):
             except: logs = []
     logs.append(data)
     with open(LOG_FILE, "w") as f:
-        json.dump(logs[-1000:], f)  # keep last 1000
+        json.dump(logs[-1000:], f)
 
 # ─── API Key auth ─────────────────────────────────────────────────────────────
 def verify_api_key(request: Request):
@@ -126,7 +124,6 @@ def verify_api_key(request: Request):
     keys = load_keys()
     if key not in keys:
         raise HTTPException(status_code=403, detail="Invalid API key")
-    # track usage
     keys[key]["requests"] = keys[key].get("requests", 0) + 1
     keys[key]["last_used"] = datetime.datetime.now().isoformat()
     save_keys(keys)
@@ -146,7 +143,6 @@ async def pricing(request: Request):
 async def docs_page(request: Request):
     return templates.TemplateResponse("docs.html", {"request": request})
 
-# ── Public demo endpoint (no key needed) ──
 @app.post("/demo/detect")
 async def demo_detect(request: Request):
     body = await request.json()
@@ -157,7 +153,6 @@ async def demo_detect(request: Request):
     log_event({"source": "demo", **result})
     return result
 
-# ── Paid API endpoint (key required) ──
 @app.post("/api/detect")
 async def api_detect(request: Request, account=Depends(verify_api_key)):
     body = await request.json()
@@ -168,10 +163,8 @@ async def api_detect(request: Request, account=Depends(verify_api_key)):
     log_event({"source": "api", "account": account.get("email"), **result})
     return result
 
-# ── Generate API key (for new customers) ──
 @app.post("/admin/create-key")
 async def create_key(request: Request):
-    # In production, add admin password check here
     body = await request.json()
     email = body.get("email", "unknown")
     plan = body.get("plan", "starter")
@@ -187,7 +180,6 @@ async def create_key(request: Request):
     save_keys(keys)
     return {"api_key": new_key, "email": email, "plan": plan}
 
-# ── Stats endpoint ──
 @app.get("/api/stats")
 async def stats(account=Depends(verify_api_key)):
     return {
