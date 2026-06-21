@@ -637,7 +637,7 @@ def send_api_key_email(to_email: str, api_key: str, plan: str):
 
         html_body = f"""
         <div style="background:#080c12;color:#e8edf5;font-family:sans-serif;padding:40px;max-width:560px;margin:0 auto;border-radius:12px">
-          <div style="font-size:1.3rem;font-weight:700;color:#00c878;margin-bottom:8px">🛡️ injecto.xyz</div>
+          <div style="font-size:1.3rem;font-weight:700;color:#00c878;margin-bottom:8px">injecto.xyz</div>
           <h1 style="font-size:1.4rem;color:#fff;margin:24px 0 8px">Your API Key is ready</h1>
           <p style="color:#7a8499;margin-bottom:24px">Thanks for subscribing to the <strong style="color:#fff">{plan.title()}</strong> plan ({limit} analyses/month).</p>
           <div style="background:#0e1420;border:1px solid rgba(0,200,120,0.3);border-radius:8px;padding:16px;font-family:monospace;font-size:.9rem;color:#00c878;word-break:break-all;margin-bottom:24px">
@@ -652,8 +652,10 @@ def send_api_key_email(to_email: str, api_key: str, plan: str):
         </div>"""
 
         msg.attach(MIMEText(html_body, "html"))
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.starttls()
+        # Use SSL on port 465 instead of TLS on 587 (works better on Render)
+        import ssl
+        context = ssl.create_default_context()
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
             server.login(SMTP_USER, SMTP_PASS)
             server.sendmail(FROM_EMAIL, to_email, msg.as_string())
         print(f"[EMAIL SENT] {to_email} | plan={plan} | key={api_key}")
