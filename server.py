@@ -459,8 +459,7 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--border);color:v
       <li>Email support · &lt;24h response</li>
       <li>Usage dashboard</li>
     </ul>
-    <!-- STEP 1: Replace # below with your Stripe Payment Link for Pro -->
-    <a href="#" class="plan-btn primary" id="pro-stripe-btn">Subscribe with Stripe →</a>
+    <a href="https://buy.stripe.com/test_00w6oG1Fp4bCd8ZbEw1wY00" class="plan-btn primary" id="pro-stripe-btn">Subscribe with Stripe →</a>
   </div>
 
   <!-- ENTERPRISE - replace href with your Stripe Payment Link -->
@@ -476,8 +475,7 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--border);color:v
       <li>SLA guarantee (99.9%)</li>
       <li>Audit logs + team seats</li>
     </ul>
-    <!-- STEP 2: Replace # below with your Stripe Payment Link for Enterprise -->
-    <a href="#" class="plan-btn outline" id="ent-stripe-btn">Subscribe with Stripe →</a>
+    <a href="https://buy.stripe.com/test_4gM14m1FpgYod8Z5g81wY01" class="plan-btn outline" id="ent-stripe-btn">Subscribe with Stripe →</a>
   </div>
 </div>
 
