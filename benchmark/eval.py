@@ -23,7 +23,7 @@ import time
 # CONFIG — edit these
 # ----------------------------
 API_URL = "https://injecto.xyz/api/detect"
-API_KEY = "inj_your_key_here"       # use a test key, not production
+API_KEY = "inj_4af85b45ec87432ea175a100"      # use a test key, not production
 SPLIT = "test"                       # deepset dataset has 'train' and 'test' splits
 REQUEST_DELAY = 0.05                 # seconds between calls, avoid rate limits
 OUTPUT_FILE = "benchmark/results/deepset_results.json"
