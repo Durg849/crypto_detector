@@ -10,10 +10,6 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-import rule_engine
-import ml_detector
-import pipelock_client
-
 # ─── Stripe + Email Config (set these in Render environment variables) ─────────
 stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
@@ -25,81 +21,72 @@ FROM_EMAIL = os.environ.get("SMTP_USER", "hello@injecto.xyz")
 
 app = FastAPI(title="Injecto API")
 
-# ─── Detection Pipeline ─────────────────────────────────────────────────────
-# Layer 1: rule_engine     — deterministic keyword/pattern matching (fastest)
-# Layer 2: ml_detector     — trained TF-IDF/LogReg model, catches paraphrases
-# Layer 3: pipelock_client — optional external firewall verdict
-# Layer 4: LLM verification — not implemented yet; see analyze_prompt() below
-#
-# Each layer contributes a 0-100 risk_score. We take the MAX across layers
-# (any single layer sounding the alarm is enough to flag a prompt), except
-# a rule-engine firewall block or a Pipelock "deny" verdict short-circuits
-# straight to a HIGH severity block regardless of what the other layers say.
+# ─── Detection Logic ──────────────────────────────────────────────────────────
+FIREWALL_WORDS = ["reveal password", "show api key", "system secret", "database password"]
+
+SUSPICIOUS_PATTERNS = [
+    "ignore previous instructions", "reveal system prompt", "bypass safety",
+    "developer mode", "act as system", "pretend you are", "disable restrictions",
+    "jailbreak", "override rules", "ignore all instructions", "act as dan",
+    "forget your training", "new persona", "disregard system",
+    "you are now", "ignore your rules", "bypass all"
+]
+
+ATTACK_MAP = {
+    "ignore previous instructions": "Instruction Override",
+    "ignore all instructions": "Instruction Override",
+    "reveal system prompt": "Prompt Leaking",
+    "pretend you are": "Role Hijacking",
+    "you are now": "Role Hijacking",
+    "bypass safety": "Safety Bypass",
+    "jailbreak": "Jailbreak Attack",
+    "act as dan": "Jailbreak Attack",
+    "developer mode": "Developer Mode Exploit",
+    "forget your training": "Training Override",
+    "act as system": "Privilege Escalation",
+    "disable restrictions": "Restriction Bypass",
+    "new persona": "Persona Injection",
+    "disregard system": "System Prompt Dismissal",
+    "ignore your rules": "Rule Circumvention",
+    "bypass all": "Full Bypass Attempt",
+    "override rules": "Rule Override",
+}
+
+def firewall_check(prompt):
+    return any(w in prompt.lower() for w in FIREWALL_WORDS)
+
+def detect_injection(prompt):
+    found = [p for p in SUSPICIOUS_PATTERNS if p in prompt.lower()]
+    return len(found) > 0, found
+
+def calculate_risk(patterns):
+    if len(patterns) == 0: return 10
+    elif len(patterns) == 1: return 40
+    elif len(patterns) == 2: return 70
+    else: return 90
 
 def severity_level(risk):
-    if risk < 30:
-        return "LOW"
-    elif risk < 70:
-        return "MEDIUM"
-    return "HIGH"
+    if risk < 30: return "LOW"
+    elif risk < 70: return "MEDIUM"
+    else: return "HIGH"
 
+def get_attack_types(patterns):
+    types = list({ATTACK_MAP.get(p, "Unknown Attack") for p in patterns})
+    return types if types else ["Unknown Attack"]
 
 def analyze_prompt(prompt):
     timestamp = datetime.datetime.now().isoformat()
-
-    rule_result = rule_engine.analyze(prompt)
-
-    # Hardcoded firewall content is a hard stop — don't bother with the
-    # slower layers.
-    if rule_result.blocked_by_firewall:
-        return {
-            "timestamp": timestamp, "safe": False, "blocked_by": "firewall",
-            "reason": rule_result.reason, "risk_score": 100, "severity": "HIGH",
-            "attack_types": rule_result.attack_types, "patterns": [],
-            "prompt_length": len(prompt.split()),
-            "layers": {"rule_engine": rule_result.to_dict()},
-        }
-
-    ml_result = ml_detector.predict(prompt)
-    pipelock_result = pipelock_client.scan(prompt)
-
-    layers = {
-        "rule_engine": rule_result.to_dict(),
-        "ml_detector": vars(ml_result),
-        "pipelock": vars(pipelock_result),
-    }
-
-    # A Pipelock "deny" verdict is treated as authoritative, same as our
-    # own firewall layer.
-    if pipelock_result.ran and pipelock_result.verdict == "deny":
-        return {
-            "timestamp": timestamp, "safe": False, "blocked_by": "pipelock",
-            "reason": pipelock_result.reason or "Blocked by Pipelock firewall",
-            "risk_score": pipelock_result.risk_score, "severity": "HIGH",
-            "attack_types": rule_result.attack_types or ["Firewall Block"],
-            "patterns": rule_result.patterns,
-            "prompt_length": len(prompt.split()),
-            "layers": layers,
-        }
-
-    risk = max(rule_result.risk_score, ml_result.risk_score, pipelock_result.risk_score)
-    safe = rule_result.safe and ml_result.safe and pipelock_result.safe
-
-    attack_types = rule_result.attack_types
-    if not safe and not attack_types:
-        attack_types = ["ML-Detected Injection"] if not ml_result.safe else ["Unknown Attack"]
-
-    return {
-        "timestamp": timestamp,
-        "safe": safe,
-        "reason": "Prompt injection detected" if not safe else "Prompt is safe",
-        "risk_score": risk,
-        "severity": severity_level(risk),
-        "attack_types": attack_types,
-        "patterns": rule_result.patterns,
-        "prompt_length": len(prompt.split()),
-        "layers": layers,
-    }
+    if firewall_check(prompt):
+        return {"timestamp": timestamp, "safe": False, "blocked_by": "firewall",
+                "reason": "Prompt contains forbidden content", "risk_score": 100,
+                "severity": "HIGH", "attack_types": ["Firewall Block"], "patterns": []}
+    detected, patterns = detect_injection(prompt)
+    risk = calculate_risk(patterns)
+    return {"timestamp": timestamp, "safe": not detected,
+            "reason": "Prompt injection detected" if detected else "Prompt is safe",
+            "risk_score": risk, "severity": severity_level(risk),
+            "attack_types": get_attack_types(patterns), "patterns": patterns,
+            "prompt_length": len(prompt.split())}
 
 # ─── API Keys ─────────────────────────────────────────────────────────────────
 KEYS_FILE = "api_keys.json"
