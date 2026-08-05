@@ -23,7 +23,6 @@ FROM_EMAIL = os.environ.get("SMTP_USER", "hello@injecto.xyz")
 app = FastAPI(title="Injecto API")
 
 import obfuscation_detector
-import embedding_detector
 
 # ─── Detection Logic ──────────────────────────────────────────────────────────
 FIREWALL_WORDS = ["reveal password", "show api key", "system secret", "database password"]
@@ -256,17 +255,8 @@ def analyze_prompt(prompt):
     disguise_techniques = set(deob.techniques) & _TEXT_DISGUISE_TECHNIQUES
     obfuscation_only_flag = (not detected) and len(disguise_techniques) >= 2
 
-    # Semantic layer: catches paraphrased attacks that share no vocabulary
-    # with anything in SUSPICIOUS_PATTERNS at all.
-    embedding_result = embedding_detector.predict(prompt)
-
-    rule_risk = calculate_risk(all_patterns, deob.techniques)
-    risk = max(rule_risk, embedding_result.risk_score)
-    safe = not detected and not obfuscation_only_flag and embedding_result.safe
-
-    attack_types = get_attack_types(all_patterns, deob.techniques) if (detected or obfuscation_only_flag) else []
-    if not safe and not attack_types:
-        attack_types = [f"Semantic Match: {embedding_result.closest_category}"]
+    risk = calculate_risk(all_patterns, deob.techniques)
+    safe = not detected and not obfuscation_only_flag
 
     if detected:
         reason = "Prompt injection detected"
@@ -274,21 +264,14 @@ def analyze_prompt(prompt):
             reason += f" (obfuscation: {', '.join(sorted(set(deob.techniques)))})"
     elif obfuscation_only_flag:
         reason = f"Heavily obfuscated input (techniques: {', '.join(sorted(set(deob.techniques)))})"
-    elif not embedding_result.safe:
-        reason = f"Prompt injection detected (semantically similar to a known {embedding_result.closest_category} attempt)"
     else:
         reason = "Prompt is safe"
 
     return {"timestamp": timestamp, "safe": safe, "reason": reason,
             "risk_score": risk, "severity": severity_level(risk),
-            "attack_types": attack_types,
+            "attack_types": get_attack_types(all_patterns, deob.techniques) if not safe else [],
             "patterns": all_patterns,
             "obfuscation_techniques": deob.techniques,
-            "embedding_match": {
-                "similarity": embedding_result.similarity,
-                "closest_category": embedding_result.closest_category,
-                "method": embedding_result.method,
-            },
             "prompt_length": len(prompt.split())}
 
 # ─── API Keys ─────────────────────────────────────────────────────────────────
